@@ -59,11 +59,12 @@ class packet(object):
 
         remade_data = self.repack_packet()
 
-        print '\nNEW PACKET'
-        print data
-        print ''
-        print remade_data 
+        # print '\nNEW PACKET'
+        # print data
+        # print ''
+        # print remade_data
 
+        # Unit test: Can be removed after verification.
         # A check to verify that we are decoding and encoding packets correctly
         assert data == remade_data
 
@@ -86,6 +87,7 @@ class packet(object):
         self.portSequenceNum = obj[177]
         self.timer = obj[178]
 
+        # print obj
         # If for some reason we want to manipulate the raw object
         return obj
 
@@ -181,11 +183,16 @@ class Sched_rr(object):
 
         # Main loop
         while True:
-            data, addr = self.in_sock.recvfrom(MAX_MSG_LEN + 100)
+            data, addr = self.in_sock.recvfrom(MAX_MSG_LEN)
 
-            curr_packet = packet(data)
+            # current_packet
+            c_p = packet(data)
 
             # Do things with current packet
+            print 'Success: packet %i in port %i (Src: %s.%s.%s.%s)' % (int(c_p.sequenceNum), int(c_p.fromPort), c_p.ip_source[0], c_p.ip_source[1], c_p.ip_source[2], c_p.ip_source[3])
+
+            # Throw away the packet
+
 
 if __name__ == '__main__':
     # initialise the scheduler object
