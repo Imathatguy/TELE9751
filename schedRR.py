@@ -12,14 +12,8 @@ Created on Thu Apr 24 10:51:47 2017
 
 @author: benjamin zhao
 """
-import socket
+
 import struct
-
-HOST = '127.0.0.1'
-IN_PORT = 50002
-OUT_PORT = 50003
-MAX_MSG_LEN = 200
-
 
 class packet(object):
     '''
@@ -161,41 +155,160 @@ class packet(object):
 
         return char_arr
 
+import socket
+import Queue
+import json
 
-class Sched_rr(object):
+# This is create a a class as there will be multiple of these operating
+# Concurrently and behaving exactly the same as each other.
+class wrr_scheduler(object):
     '''
-    A class to hold all the methods involving the scheduler
+    A class to hold all the methods involving a single output scheduler
+
+    num_inputs defines now many input queues exist per output
+    queue_size defines now many packets can be stored in each queue before drop
+    (Default is infinite for debug reasons)
     '''
-    def __init__(self):
-        # Setting up constants (these should be static)
-        self.in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    def __init__(self, output_port, num_inputs, weights, queue_size=0):
+        self.input_queues = []
+        self.output_port = output_port
+        self.num_inputs = num_inputs
 
-        # Binding the sockets to listen on the correct ports
+        for input_n in range(num_inputs):
+            self.input_queues.append(Queue.Queue(queue_size))
 
-        # The input will always be listening
-        self.in_sock.bind((HOST, IN_PORT))
-        # The output is a client ready to send data out
-        self.out_sock.connect((HOST, OUT_PORT))
+        self.next_packet = None
 
-    def main_loop(self):
-        '''The main loop function'''
+        # Normalise the weights with the mean packet length
+        assert len(weights) == num_inputs, 'Invalid Weightings for Output Port %s' % self.output_port
+        self.weights = weights
 
-        # Main loop
-        while True:
-            data, addr = self.in_sock.recvfrom(MAX_MSG_LEN)
+        # TEMPOARY BASIC ROUND ROBIN POINTER
+        self.last_served = 0
 
-            # current_packet
-            c_p = packet(data)
+    def put_packet(self, packet):
+        self.input_queues[packet.fromPort].put(packet)
 
-            # Do things with current packet
-            print 'Success: packet %i in port %i (Src: %s.%s.%s.%s)' % (int(c_p.sequenceNum), int(c_p.fromPort), c_p.ip_source[0], c_p.ip_source[1], c_p.ip_source[2], c_p.ip_source[3])
+    def get_next_serving_port(self):
+        # TODO: See which input port to serve next based of normalised weights and rounds
+        self.last_served = (self.last_served + 1) % self.num_inputs
+        return self.last_served
 
-            # Throw away the packet
+    def schedule_next_packet(self, serving_port):
+        self.next_packet = self.input_queues[serving_port].get()
+
+    def output_packet(self):
+        if self.next_packet.datalength > 50:
+            self.next_packet.timer += 50
+        self.next_packet.timer += 50
+
+        return self.next_packet
 
 
+
+# Main Schduler moved out of class into the main function to allow interactive debugging
 if __name__ == '__main__':
-    # initialise the scheduler object
-    scheduler = Sched_rr()
-    # Execute the main loop
-    scheduler.main_loop()
+
+    ########################################################################
+    # Retrieve the scheduler settings from controller
+    # Plan: to inplement as JSON format that could be transmissted over ip
+    # or just as easily stored as text
+    ########################################################################
+    # Currently reading from a file, but can be retrieved from a url
+    with open('config.json') as config_file:
+        config = json.load(config_file)
+
+    # Unpack the configuration settings from our schedRR JSON
+    # the JSON is for variable readability,
+    # but in code the variables are shorter for coding ease
+    our_config = config['schedRR']
+
+    HOST = our_config['framework_host']
+    IN_PORT = our_config['framework_input_port']
+    OUT_PORT = our_config['framework_output_port']
+    MAX_MSG_LEN = our_config['max_msg_len']
+
+    NUM_INPUT = our_config['num_input_ports']
+    NUM_OUTPUT = our_config['num_output_ports']
+
+    override_weights = our_config['individual_output_configs']
+    global_weights = our_config['global_output_configs']['input_weights']
+
+    debug_str = (('Initialising schedRR.py ...\n') +
+                 ('Communications on HOST: %s\n' % HOST) +
+                 ('Listening on port: %s\n' % IN_PORT) +
+                 ('Outputting on port: %s\n' % OUT_PORT) +
+                 ('Expecting Framework data structs / \"packets\" of lenght: %s\n' % MAX_MSG_LEN))
+
+    print debug_str
+
+    ########################################################################
+    # Initialising the input port queues on the outputs
+    ########################################################################
+    # For every Ouput Port in the switch
+    output_sched_holder = []
+
+    for output_n in range(NUM_OUTPUT):
+        # Determin which set ofinput weights to use
+        if str(output_n) in override_weights:
+            input_weights = override_weights[str(output_n)]['input_weights']
+        else:
+            input_weights = global_weights
+
+        print 'Weights on Output: %s - %s' % (output_n, input_weights)
+
+        # Initialise a scheduler, and add it to the holder
+        output_sched_holder.append(wrr_scheduler(output_n, NUM_INPUT, input_weights))
+
+    ########################################################################
+    # Initialising the Framework comunications
+    ########################################################################
+    # Setting up constants (these should be static)
+    in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    # Binding the sockets to listen on the correct ports
+    # The input will always be listening
+    in_sock.bind((HOST, IN_PORT))
+    # The output is a client ready to send data out
+    out_sock.connect((HOST, OUT_PORT))
+
+    # Set a socket timeout to allow the system to DIE gracefully if no flows
+    in_sock.settimeout(10)
+
+    print '\nCompleted WRR Scheduler initialisation'
+
+    # accumulate the packets for DEBUGing
+    packet_collector = []
+    ########################################################################
+    # The Main loop
+    ########################################################################
+
+    # If we want to do multi-threading of the diffrent schedulers we can here
+    while True:
+        ####################################################################
+        # Retreive and handle the incoming framework packet
+        ####################################################################
+        data, addr = in_sock.recvfrom(MAX_MSG_LEN)
+
+        # current_packet
+        c_p = packet(data)
+        # distribute the Incoming packet to the correct output port scheduler
+        output_sched_holder[c_p.toPort].put_packet(c_p)
+
+        # Debug code for packets
+        packet_collector.append(c_p)
+
+        # Do things with current packet
+        print 'Success: packet %i in port %i (Src: %s.%s.%s.%s)' % (int(c_p.sequenceNum), int(c_p.fromPort), c_p.ip_source[0], c_p.ip_source[1], c_p.ip_source[2], c_p.ip_source[3])
+
+        ####################################################################
+        # Invoke the schdulers to make a output decision and do the output
+        # to the next stage (TEMPOARY RR)
+        ####################################################################
+
+        for scheduler in output_sched_holder:
+            next_input_served = scheduler.get_next_serving_port()
+            scheduler.schedule_next_packet(next_input_served)
+            print 'Sending on port %i' % scheduler.output_port
+            out_sock.send(scheduler.output_packet().repack_packet())

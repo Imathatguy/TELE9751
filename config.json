@@ -1,0 +1,39 @@
+{
+    "schedRR": {
+        "framework_input_port":     50002,
+        "framework_output_port":    50003,
+        "framework_host":           "127.0.0.1",
+        "max_msg_len":              200,
+
+        "num_input_ports":          8,
+        "num_output_ports":         8,
+
+        "_comment":                 "If set individual params will override global defaults",
+        "individual_output_configs": {
+            "0": {
+                "output_port":      0,
+                "input_weights": [
+                                    2,1,2,4,1,2,1,1
+                ]   
+            },
+            "1": {
+                "output_port":      1,
+                "input_weights": [
+                                    1,1.1,2,1,3,1,5,2
+                ]   
+            }
+        },
+        "global_output_configs": {
+            "input_weights": [
+                                    1,1,1,1,1,1,1,1
+            ]   
+        }
+    },
+
+
+    "_comment":                     "Avaliable for other module configurations",
+    "gen": {
+        "id": "valore",
+        "test": "test"
+    }
+}
