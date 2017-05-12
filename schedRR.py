@@ -43,6 +43,7 @@ class packet(object):
         # Keep a copy of the raw byte data
         # we should remove this in the final revision to save memory
         self.data = data
+        self.invalid = True
 
         # The real deal, we decode the raw data with unpack_packet and
         # save the variables to the current object
@@ -50,24 +51,57 @@ class packet(object):
 
         # 4*9 chars in the array = 36
         self.packet_format = '36c36ch100ciiiiii'
-        self.unpack_packet(data)
+        try:
+            self.unpack_packet(data)
+            remade_data = self.repack_packet()
 
-        remade_data = self.repack_packet()
+            # print '\nNEW PACKET'
+            # print data
+            # print ''
+            # print remade_data
 
-        # print '\nNEW PACKET'
-        # print data
-        # print ''
-        # print remade_data
+            # Unit test: Can be removed after verification.
+            # A check to verify that we are decoding and encoding packets correctly
+            assert data == remade_data
 
-        # Unit test: Can be removed after verification.
-        # A check to verify that we are decoding and encoding packets correctly
-        assert data == remade_data
+            self.validate_packet()
+
+            # Mark this packet as valid, if operations complete successfully
+            self.invalid = False
+        except:
+            print 'Make - Remake - Validate Failed'
+
+    def validate_packet(self):
+        '''
+        Function to verify the fields in the packet structure
+        '''
+
+        for seg in self.ip_dest:
+            # 255 is the max value an ipv4 address can have
+            assert int(seg) < 256
+        for seg in self.ip_source:
+            # 255 is the max value an ipv4 address can have
+            assert int(seg) < 256
+
+        assert self.datalength < 101
+
+        # TODO make a test to chec data validity
+        # self.data # 100 long
+
+        # TODO perform a crc on the data to verify with the frame check
+        # self.frameCheck
+
+        # TODO make checks on these?
+        # self.fromPort
+        # self.toPort
+        # self.sequenceNum
+        # self.portSequenceNum
+        # self.timer
 
     def unpack_packet(self, packet):
         '''
         Function to decode the recieved packet into proper variables
         '''
-
         obj = struct.unpack(self.packet_format, packet)
 
         # Set the values for the current packet
@@ -82,7 +116,6 @@ class packet(object):
         self.portSequenceNum = obj[177]
         self.timer = obj[178]
 
-        # print obj
         # If for some reason we want to manipulate the raw object
         return obj
 
@@ -207,8 +240,10 @@ class wrr_scheduler(object):
         # Put the packet onto the proper queue
         self.input_queues[source_ip].put(packet)
 
+        # TODO renormalise the weights of all other ips, as there is a new weight to consider
+
     def ready_next_packet(self):
-        # TODO: See which input port to serve next based of normalised weights and rounds
+        # TODO: See which ip to serve next based of normalised weights and rounds
         if self.ips_tobeserved.qsize() > 0:
             next_ip = self.ips_tobeserved.get()
             self.next_packet = self.input_queues[next_ip].get()
@@ -324,6 +359,11 @@ if __name__ == '__main__':
         # current_packet
         if data is not None:
             c_p = packet(data)
+
+            if c_p.invalid:
+                print 'Malformed Packet Dropped'
+                continue
+
             # distribute the Incoming packet to the correct output port scheduler
             output_sched_holder[c_p.toPort].put_packet(c_p)
 
