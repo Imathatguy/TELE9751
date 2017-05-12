@@ -197,33 +197,41 @@ class wrr_scheduler(object):
         self.last_served = 0
 
     def put_packet(self, packet):
-        source_ip = packet.ip_source
+        # we process the ip as  string, because it's easier
+        source_ip = ('%i.%i.%i.%i') % (packet.ip_source[0], packet.ip_source[1], packet.ip_source[2], packet.ip_source[3])
         # See if an input queue for this ip already exists
         # If not make a new queue for the packet
-        if source_ip not in input_queues:
-            input_queues[source_ip] = Queue.Queue()
+        if source_ip not in self.input_queues:
+            self.input_queues[source_ip] = Queue.Queue()
             self.ips_tobeserved.put(source_ip)
         # Put the packet onto the proper queue
-        input_queues[source_ip].put(packet)
+        self.input_queues[source_ip].put(packet)
 
     def ready_next_packet(self):
         # TODO: See which input port to serve next based of normalised weights and rounds
-        next_ip = self.ips_tobeserved.get()
-        next_packet = self.input_queues[next_ip].get()
+        if self.ips_tobeserved.qsize() > 0:
+            next_ip = self.ips_tobeserved.get()
+            self.next_packet = self.input_queues[next_ip].get()
 
-        # Check if there are any packets left, if not destroy this queue
-        if self.input_queues[next_ip].empty():
-            self.input_queues.pop(next_ip, None)
-        else:
-            # requeue the ip to be serviced
-            self.ips_tobeserved.put(next_ip)
+            # Check if there are any packets left, if not destroy this queue
+            if self.input_queues[next_ip].empty():
+                self.input_queues.pop(next_ip, None)
+            else:
+                # requeue the ip to be serviced
+                self.ips_tobeserved.put(next_ip)
 
     def output_next_packet(self):
-        if self.next_packet.datalength > 50:
+        if self.next_packet is not None:
+            if self.next_packet.datalength > 50:
+                self.next_packet.timer += 50
             self.next_packet.timer += 50
-        self.next_packet.timer += 50
 
-        return self.next_packet
+            output = self.next_packet
+
+            self.next_packet = None
+            return output
+        else:
+            return None
 
 # Main Schduler moved out of class into the main function to allow interactive
 # debugging
@@ -295,7 +303,8 @@ if __name__ == '__main__':
     out_sock.connect((HOST, OUT_PORT))
 
     # Set a socket timeout to allow the system to DIE gracefully if no flows
-    in_sock.settimeout(10)
+    in_sock.settimeout(20)
+    out_sock.settimeout(0.5)
 
     print '\nCompleted WRR Scheduler initialisation'
 
@@ -313,18 +322,19 @@ if __name__ == '__main__':
         data, addr = in_sock.recvfrom(MAX_MSG_LEN)
 
         # current_packet
-        c_p = packet(data)
-        # distribute the Incoming packet to the correct output port scheduler
-        output_sched_holder[c_p.toPort].put_packet(c_p)
+        if data is not None:
+            c_p = packet(data)
+            # distribute the Incoming packet to the correct output port scheduler
+            output_sched_holder[c_p.toPort].put_packet(c_p)
 
-        # Debug code for packets
-        packet_collector.append(c_p)
+            # Debug code for packets
+            packet_collector.append(c_p)
 
-        # Do things with current packet
-        print 'Success: packet %i in port %i (Src: %s.%s.%s.%s)' % (
-            int(c_p.sequenceNum), int(c_p.fromPort), c_p.ip_source[0],
-            c_p.ip_source[1], c_p.ip_source[2], c_p.ip_source[3]
-        )
+            # Do things with current packet
+            print 'Success: packet %i in port %i (Src: %s.%s.%s.%s)' % (
+                int(c_p.sequenceNum), int(c_p.fromPort), c_p.ip_source[0],
+                c_p.ip_source[1], c_p.ip_source[2], c_p.ip_source[3]
+            )
 
         ####################################################################
         # Invoke the schdulers to make a output decision and do the output
@@ -333,5 +343,7 @@ if __name__ == '__main__':
 
         for scheduler in output_sched_holder:
             scheduler.ready_next_packet()
-            print 'Sending on port %i' % scheduler.output_port
-            out_sock.send(scheduler.output_next_packet().repack_packet())
+            send_packet = scheduler.output_next_packet()
+            if send_packet is not None:
+                out_sock.sendall(send_packet.repack_packet())
+                print 'Successfully sent on port %i' % scheduler.output_port
