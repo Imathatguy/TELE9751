@@ -1,35 +1,63 @@
 {
+    "_comment_schedRR":             "Configuration of the scheduler",
     "schedRR": {
         "framework_input_port":     50002,
         "framework_output_port":    50003,
         "framework_host":           "127.0.0.1",
         "max_msg_len":              200,
 
-        "num_input_ports":          8,
         "num_output_ports":         8,
 
-        "_comment":                 "If set individual params will override global defaults",
+        "_comment_output":          "If set individual ip/output params will override global defaults and ip defaults",
         "individual_output_configs": {
             "0": {
-                "output_port":      0,
-                "input_weights": [
-                                    2,1,2,4,1,2,1,1
-                ]   
+                "192.0.0.1":{
+                    "weight":       2,
+                    "mean_length":  3
+                },
+                "192.0.0.2":{
+                    "weight":       3,
+                    "mean_length":  2
+                },
+                "192.0.0.3":{
+                    "weight":       4,
+                    "mean_length":  1
+                }
             },
             "1": {
-                "output_port":      1,
-                "input_weights": [
-                                    1,1.1,2,1,3,1,5,2
-                ]   
+                "192.0.0.1":{
+                    "weight":       2,
+                    "mean_length":  3
+                },
+                "192.0.0.2":{
+                    "weight":       3,
+                    "mean_length":  2
+                },
+                "192.0.0.3":{
+                    "weight":       4,
+                    "mean_length":  1
+                }
             }
         },
-        "global_output_configs": {
-            "input_weights": [
-                                    1,1,1,1,1,1,1,1
-            ]   
+
+        "_comment_ip":              "If set individual ip params will override global defaults",
+        "individual_ip_configs": {
+                "192.168.1.1":{
+                    "weight":       2,
+                    "mean_length":  3
+                },
+                "10.0.0.5":{
+                    "weight":       3,
+                    "mean_length":  2
+                }
+        },
+
+        "_comment_global":          "The global default ip parameter",
+        "global_ip_configs": {
+            "weight":               2,
+            "mean_length":          3
         }
     },
-
 
     "_comment":                     "Avaliable for other module configurations",
     "gen": {

@@ -16,6 +16,7 @@ Created on Thu Apr 24 10:51:47 2017
 import struct
 
 class packet(object):
+    # TODO implement error/malformeation checks
     '''
     A class to represent a packet and to hold all the associated methods
 
@@ -155,9 +156,11 @@ class packet(object):
 
         return char_arr
 
+
 import socket
 import Queue
 import json
+
 
 # This is create a a class as there will be multiple of these operating
 # Concurrently and behaving exactly the same as each other.
@@ -169,44 +172,61 @@ class wrr_scheduler(object):
     queue_size defines now many packets can be stored in each queue before drop
     (Default is infinite for debug reasons)
     '''
-    def __init__(self, output_port, num_inputs, weights, queue_size=0):
-        self.input_queues = []
+    def __init__(self, output_port, output_specfic_overrides,
+                 ip_overrides, global_weight, queue_size=0):
+
+        # A dictionary holder for the diffrent ip queues
+        self.input_queues = {}
+        self.ips_tobeserved = Queue.Queue()
         self.output_port = output_port
-        self.num_inputs = num_inputs
-
-        for input_n in range(num_inputs):
-            self.input_queues.append(Queue.Queue(queue_size))
-
         self.next_packet = None
 
-        # Normalise the weights with the mean packet length
-        assert len(weights) == num_inputs, 'Invalid Weightings for Output Port %s' % self.output_port
-        self.weights = weights
+        # TODO: Normalise the weights with the mean packet length
+
+        # Unpack the weights as provided from the input
+        self.ip_weights = {'default': global_weight}
+        # Unpack the ip specific weights
+        if ip_overrides is not None:
+            for ip in ip_overrides:
+                self.ip_weights[ip] = ip_overrides[ip]
+        if output_specfic_overrides is not None:
+            for ip in output_specfic_overrides:
+                self.ip_weights[ip] = output_specfic_overrides[ip]
 
         # TEMPOARY BASIC ROUND ROBIN POINTER
         self.last_served = 0
 
     def put_packet(self, packet):
-        self.input_queues[packet.fromPort].put(packet)
+        source_ip = packet.ip_source
+        # See if an input queue for this ip already exists
+        # If not make a new queue for the packet
+        if source_ip not in input_queues:
+            input_queues[source_ip] = Queue.Queue()
+            self.ips_tobeserved.put(source_ip)
+        # Put the packet onto the proper queue
+        input_queues[source_ip].put(packet)
 
-    def get_next_serving_port(self):
+    def ready_next_packet(self):
         # TODO: See which input port to serve next based of normalised weights and rounds
-        self.last_served = (self.last_served + 1) % self.num_inputs
-        return self.last_served
+        next_ip = self.ips_tobeserved.get()
+        next_packet = self.input_queues[next_ip].get()
 
-    def schedule_next_packet(self, serving_port):
-        self.next_packet = self.input_queues[serving_port].get()
+        # Check if there are any packets left, if not destroy this queue
+        if self.input_queues[next_ip].empty():
+            self.input_queues.pop(next_ip, None)
+        else:
+            # requeue the ip to be serviced
+            self.ips_tobeserved.put(next_ip)
 
-    def output_packet(self):
+    def output_next_packet(self):
         if self.next_packet.datalength > 50:
             self.next_packet.timer += 50
         self.next_packet.timer += 50
 
         return self.next_packet
 
-
-
-# Main Schduler moved out of class into the main function to allow interactive debugging
+# Main Schduler moved out of class into the main function to allow interactive
+# debugging
 if __name__ == '__main__':
 
     ########################################################################
@@ -228,17 +248,19 @@ if __name__ == '__main__':
     OUT_PORT = our_config['framework_output_port']
     MAX_MSG_LEN = our_config['max_msg_len']
 
-    NUM_INPUT = our_config['num_input_ports']
     NUM_OUTPUT = our_config['num_output_ports']
 
-    override_weights = our_config['individual_output_configs']
-    global_weights = our_config['global_output_configs']['input_weights']
+    output_overrides = our_config['individual_output_configs']
+    ip_overrides = our_config['individual_ip_configs']
+    global_weight = our_config['global_ip_configs']
 
+    # DEBUG about system framework
     debug_str = (('Initialising schedRR.py ...\n') +
                  ('Communications on HOST: %s\n' % HOST) +
                  ('Listening on port: %s\n' % IN_PORT) +
                  ('Outputting on port: %s\n' % OUT_PORT) +
-                 ('Expecting Framework data structs / \"packets\" of lenght: %s\n' % MAX_MSG_LEN))
+                 ('Expecting Framework data structs / ') +
+                 ('\"packets\" of lenght: %s\n' % MAX_MSG_LEN))
 
     print debug_str
 
@@ -249,16 +271,15 @@ if __name__ == '__main__':
     output_sched_holder = []
 
     for output_n in range(NUM_OUTPUT):
-        # Determin which set ofinput weights to use
-        if str(output_n) in override_weights:
-            input_weights = override_weights[str(output_n)]['input_weights']
-        else:
-            input_weights = global_weights
-
-        print 'Weights on Output: %s - %s' % (output_n, input_weights)
+        # Determine if there are output specfic overrides
+        input_weights = None
+        if str(output_n) in output_overrides:
+            input_weights = output_overrides[str(output_n)]
 
         # Initialise a scheduler, and add it to the holder
-        output_sched_holder.append(wrr_scheduler(output_n, NUM_INPUT, input_weights))
+        output_sched_holder.append(
+            wrr_scheduler(output_n, input_weights, ip_overrides, global_weight)
+        )
 
     ########################################################################
     # Initialising the Framework comunications
@@ -300,7 +321,10 @@ if __name__ == '__main__':
         packet_collector.append(c_p)
 
         # Do things with current packet
-        print 'Success: packet %i in port %i (Src: %s.%s.%s.%s)' % (int(c_p.sequenceNum), int(c_p.fromPort), c_p.ip_source[0], c_p.ip_source[1], c_p.ip_source[2], c_p.ip_source[3])
+        print 'Success: packet %i in port %i (Src: %s.%s.%s.%s)' % (
+            int(c_p.sequenceNum), int(c_p.fromPort), c_p.ip_source[0],
+            c_p.ip_source[1], c_p.ip_source[2], c_p.ip_source[3]
+        )
 
         ####################################################################
         # Invoke the schdulers to make a output decision and do the output
@@ -308,7 +332,6 @@ if __name__ == '__main__':
         ####################################################################
 
         for scheduler in output_sched_holder:
-            next_input_served = scheduler.get_next_serving_port()
-            scheduler.schedule_next_packet(next_input_served)
+            scheduler.ready_next_packet()
             print 'Sending on port %i' % scheduler.output_port
-            out_sock.send(scheduler.output_packet().repack_packet())
+            out_sock.send(scheduler.output_next_packet().repack_packet())
