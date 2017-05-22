@@ -204,20 +204,26 @@ class Packet(object):
 # Concurrently and behaving exactly the same as each other.
 class WRRScheduler(object):
     '''
-    A class to hold all the methods involving a single output scheduler
-
-    num_inputs defines now many input queues exist per output
-    queue_size defines now many packets can be stored in each queue before drop
-    (Default is infinite for debug reasons)
+    A class to hold all the methods involving a single output scheduler.
     '''
     def __init__(self, output_port, output_specfic_overrides,
                  ip_overrides, global_config, queue_size=0):
+        '''
+        Initialises a WRRScheduler object.
 
+        Inputs:
+        output_port: An identifier for the current bound port
+        queue_size: defines now many packets can be stored in each queue
+        (Default is infinite for debug reasons)
+
+        '''
         # A dictionary holder for the diffrent ip queues
         self.input_queues = {}
         self.ips_tobeserved = Queue.Queue()
         self.output_port = output_port
         self.next_packet = None
+
+        self.max_packets_per_queue = queue_size
 
         # Unpack the weights as provided from the input
         self.ip_config = {'default': global_config}
@@ -269,9 +275,7 @@ class WRRScheduler(object):
             '''
             ips = [a[0] for a in configs]
             fracs = [a[1] for a in configs]
-            print fracs
             denoms = [frac.denominator for frac in fracs]
-            print denoms
             while max(denoms) != 1:
                 largest_denom = max(denoms)
                 temp_fracs = [largest_denom*frac for frac in fracs]
@@ -282,16 +286,32 @@ class WRRScheduler(object):
 
         active_configs = make_whole(active_configs)
 
-        print active_configs
-
         # TODO: Do more rounding with the numerators if they are too large
 
         for config in active_configs:
             this_ip = config[0]
             packets_this_round = config[1]
             # Enqueue the number of packets we need onto the waiting queue
-            for increment in range(packets_this_round):
+            for increment in range(min(packets_this_round, self.input_queues[this_ip].qsize())):
                 self.ips_tobeserved.put(this_ip)
+
+    def print_status(self):
+        '''
+        Prints to console the status of the scheduler
+        '''
+        print_str = ('Output %s waiting ' % self.output_port)
+
+        if len(self.input_queues.keys()) == 0:
+            # print_str += 'Empty'
+            pass
+
+        else:
+            # print_str += 'IP queue : packets in queue\n'
+            for waiting_ip in self.input_queues:
+                print_str += '%s : %i ' % (waiting_ip,
+                                           self.input_queues[waiting_ip].qsize())
+
+        print print_str
 
     def put_packet(self, packet):
         '''
@@ -306,9 +326,14 @@ class WRRScheduler(object):
         # See if an input queue for this ip already exists
         # If not make a new queue for the packet
         if source_ip not in self.input_queues:
-            self.input_queues[source_ip] = Queue.Queue()
-        # Put the packet onto the proper queue
-        self.input_queues[source_ip].put(packet)
+            self.input_queues[source_ip] = Queue.Queue(self.max_packets_per_queue)
+
+        # Put the packet onto the proper queue, drop if no space
+        try:
+            self.input_queues[source_ip].put_nowait(packet)
+        except Queue.Full:
+            # Drop the packet
+            print 'Packet %s dropped.' % packet.sequenceNum
 
     def ready_next_packet(self):
         '''
@@ -457,6 +482,8 @@ if __name__ == '__main__':
     ip_overrides = our_config['individual_ip_configs']
     global_weight = our_config['global_ip_configs']
 
+    source_queue_size = our_config['source_queue_size']
+
     # DEBUG about system framework
     debug_str = (('Initialising schedRR.py ...\n') +
                  ('Communications on HOST: %s\n' % HOST) +
@@ -481,7 +508,8 @@ if __name__ == '__main__':
 
         # Initialise a scheduler, and add it to the holder
         output_sched_holder.append(
-            WRRScheduler(output_n, input_weights, ip_overrides, global_weight)
+            WRRScheduler(output_n, input_weights, ip_overrides, global_weight,
+                         queue_size=source_queue_size)
         )
 
     ########################################################################
@@ -508,6 +536,8 @@ if __name__ == '__main__':
     ########################################################################
     # The Main loop
     ########################################################################
+
+    our_time = 0
 
     # If we want to do multi-threading of the diffrent schedulers we can here
     while True:
@@ -540,14 +570,25 @@ if __name__ == '__main__':
                 current_packet.ip_source[2], current_packet.ip_source[3]
             )
 
+            sim_time = current_packet.timer
+
+            # Reset our time if sequence resets
+            if current_packet.sequenceNum == 0:
+                our_time = 0
+
         ####################################################################
         # Invoke the schdulers to make a output decision and do the output
         # to the next stage
         ####################################################################
+        while sim_time > our_time:
+            our_time += 4
 
-        for scheduler in output_sched_holder:
-            scheduler.ready_next_packet()
-            send_packet = scheduler.output_next_packet()
-            if send_packet is not None:
-                out_sock.sendall(send_packet.repack_packet())
-                print 'Successfully sent on port %i' % scheduler.output_port
+            for scheduler in output_sched_holder:
+                scheduler.ready_next_packet()
+                send_packet = scheduler.output_next_packet()
+                if send_packet is not None:
+                    out_sock.sendall(send_packet.repack_packet())
+                    print 'Successfully sent on port %i' % scheduler.output_port
+
+            for scheduler in output_sched_holder:
+                scheduler.print_status()

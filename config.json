@@ -8,6 +8,8 @@
 
         "num_output_ports":         8,
 
+        "source_queue_size":        4,
+
         "_comment_output":          "If set individual ip/output params will override global defaults and ip defaults",
         "individual_output_configs": {
             "0": {
