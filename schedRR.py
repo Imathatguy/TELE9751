@@ -1,11 +1,11 @@
 """
 This is the python script framework that will contain the code
-to implement the round robin scheduler for TELE9751 - network arch
+to implement the round robin scheduler for TELE9751 - switching arch
 
-We will employ pythons builtin sockets as to enable fucntionality withount
-any additional libraries for better system compatability
+We will employ pythons built-in sockets as to enable functionality without
+any additional libraries for better system compatibility
 
-This script as been constructed for Python 2.7, due to syntax familliarity
+This script as been constructed for Python 2.7, due to syntax familiarity
 
 
 Created on Thu Apr 24 10:51:47 2017
@@ -41,20 +41,40 @@ class Packet(object):
             int portSequenceNum;
             int timer;
         };
+
+
+    Attributes:  
+
+        ip_dest
+        ip_source
+        datalength
+        data
+        frameCheck
+        fromPort
+        toPort
+        sequenceNum
+        portSequenceNum
+        timer
+
+
     '''
     # TODO implement more error/malformeation checks
 
     def __init__(self, data):
-        # Keep track of the length of the data
-        self.msg_len = len(data)
-        # Keep a copy of the raw byte data
-        # we should remove this in the final revision to save memory
-        self.data = data
+        '''
+        Initialisation of a new Packet requires the data received
+        from the framework input port, to be reconstructed into usable
+        python data-structures.
+
+        validate_packet() will also be called to ensure the validity of
+        the received packet
+        '''
+
         self.invalid = True
 
         # The real deal, we decode the raw data with unpack_packet and
         # save the variables to the current object
-        # The variables will be set within the subfunction
+        # The variables will be set within the sub-function
 
         # 4*9 chars in the array = 36
         # c = char, h = short, i = int
@@ -64,11 +84,6 @@ class Packet(object):
         try:
             self.unpack_packet(data)
             remade_data = self.repack_packet()
-
-            # print '\nNEW PACKET'
-            # print data
-            # print ''
-            # print remade_data
 
             # Unit test: Can be removed after verification.
             # A check to verify that we are de/encoding packets correctly
@@ -83,7 +98,14 @@ class Packet(object):
 
     def validate_packet(self):
         '''
-        Function to verify the fields in the packet structure
+        Function to verify the date fields of the packet structure.
+
+        Future works to expand checks to every field.
+
+        Currently only checking:
+            IP source
+            IP destination
+            Data Length
         '''
 
         for seg in self.ip_dest:
@@ -110,7 +132,9 @@ class Packet(object):
 
     def unpack_packet(self, packet):
         '''
-        Function to decode the recieved packet into proper variables
+        Function to decode the received packet into python data-structures,
+
+        For use in the current python-based module.
         '''
         obj = struct.unpack(self.packet_format, packet)
 
@@ -131,8 +155,9 @@ class Packet(object):
 
     def repack_packet(self):
         '''
-        Function to reencode the recieved packet into a c struct for the
-        next module
+        Function to re-encode the received packet into a C struct,
+
+        For the use in the next switch framework module.
         '''
         obj = []
 
@@ -156,11 +181,14 @@ class Packet(object):
         return data
 
     def reconstruct_ip(self, char_arr):
-        ''' The char_arr is in a format that contains the bitwise information
-            in 8 bit sections (ipv4 addresses) separated by a null character in
-            the 9th element e.g.
+        '''
+        Used in unpack_packet() to convert IP to integer fields
 
-            [0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, null ....]
+        The char_arr is in a format that contains the bitwise information
+        in 8 bit sections (ipv4 addresses) separated by a null character in
+        the 9th element e.g.
+
+        [0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, null, ...]
         '''
         def bitlist_to_int(bitlist):
             '''Convert bit list to integer'''
@@ -179,12 +207,15 @@ class Packet(object):
         return ipv4
 
     def deconstruct_ip(self, value_arr):
-        ''' The char_arr is in a format that contains the bitwise information
-            in 8 bit sections (ipv4 addresses) separated by a null character in
-            the 9th element e.g.
+        '''
+        Used in repack_packet() to convert IP to chars
 
-            [192.                        : 0                            ,...]
-            [0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, null ....]
+        The char_arr is in a format that contains the bitwise information
+        in 8 bit sections (ipv4 addresses) separated by a null character in
+        the 9th element e.g.
+
+        [192.                        : 0                           , ...]
+        [0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0, 0, 0, 0, null, ...]
         '''
         def bitlist_dot(value):
             # List Comprehension
@@ -204,20 +235,25 @@ class Packet(object):
 # Concurrently and behaving exactly the same as each other.
 class WRRScheduler(object):
     '''
-    A class to hold all the methods involving a single output scheduler.
+    A class to hold all the methods involving a single output weighted
+    round robin scheduler.
     '''
     def __init__(self, output_port, output_specfic_overrides,
                  ip_overrides, global_config, queue_size=0):
         '''
-        Initialises a WRRScheduler object.
+        Initialises a WRRScheduler class.
 
         Inputs:
-        output_port: An identifier for the current bound port
-        queue_size: defines now many packets can be stored in each queue
-        (Default is infinite for debug reasons)
+            output_port:        An identifier for the current output port
+            output_specific_overrides: IP source overrides specific for this
+                                port.
+            ip_overrides:       IP source global overrides
+            global_config:      IP source default weight and mean packet length
+            queue_size:         Defines now many packets can be stored
+                                in each queue (Default is infinite)
 
         '''
-        # A dictionary holder for the diffrent ip queues
+        # A dictionary holder for the different ip queues
         self.input_queues = {}
         self.ips_tobeserved = Queue.Queue()
         self.output_port = output_port
@@ -240,7 +276,8 @@ class WRRScheduler(object):
 
     def recompute_round_service(self):
         '''
-        We recompute the weights of the active queues
+        We recompute the weights of the current active queues for the next
+        round of service.
         '''
         # Get a list of active queues that are active for this round
         active_ips = self.input_queues.keys()
@@ -256,7 +293,7 @@ class WRRScheduler(object):
         active_configs = []
 
         for curr_ip in active_ips:
-            # Try get an override, or take defualt values
+            # Try get an override, or take default values
             ip_config = self.ip_config.get(curr_ip, default_config)
             # Make a normalisation fraction
             ip_packet_per_round = fractions.Fraction(
@@ -297,7 +334,7 @@ class WRRScheduler(object):
 
     def print_status(self):
         '''
-        Prints to console the status of the scheduler
+        Prints to console the status of the current scheduler.
         '''
         print_str = ('Output %s waiting ' % self.output_port)
 
@@ -315,8 +352,8 @@ class WRRScheduler(object):
 
     def put_packet(self, packet):
         '''
-        Method to allow a caller to insert a new packet into the control of
-        the scheduler.
+        Method to allow a caller to insert a new Packet into the control of
+        this scheduler.
         '''
         # we process the ip as  string, because it's easier
         source_ip = ('%i.%i.%i.%i') % (packet.ip_source[0],
@@ -337,8 +374,8 @@ class WRRScheduler(object):
 
     def ready_next_packet(self):
         '''
-        With the current state of the sceduler determine what packet is the
-        next to leave the system
+        With the current state of the scheduler determine what packet is the
+        next to leave the system.
         '''
         if self.ips_tobeserved.qsize() > 0:
             next_ip = self.ips_tobeserved.get()
@@ -356,7 +393,7 @@ class WRRScheduler(object):
 
     def output_next_packet(self):
         '''
-        Return the next sceduled packet to the caller
+        Return the next scheduled Packet to the caller for framework sending.
         '''
         if self.next_packet is not None:
             if self.next_packet.datalength > 50:
@@ -372,40 +409,31 @@ class WRRScheduler(object):
 
 
 # This is the sample api as the weighted round robin class,
-# But implemented for basic roun drobin initially
+# But implemented for basic round robin initially
 class RRScheduler(object):
     '''
-    A class to hold all the methods involving a single output scheduler
-
-    num_inputs defines now many input queues exist per output
-    queue_size defines now many packets can be stored in each queue before drop
-    (Default is infinite for debug reasons)
+    A class to hold all the methods involving a single output
+    round robin scheduler.
     '''
-    def __init__(self, output_port, output_specfic_overrides,
-                 ip_overrides, global_weight, queue_size=0):
+    def __init__(self, output_port, queue_size=0):
+        '''
+        Initialises a RRScheduler class.
 
-        # A dictionary holder for the diffrent ip queues
+        Inputs:
+            output_port:        An identifier for the current output port
+            queue_size:         Defines now many packets can be stored
+                                in each queue (Default is infinite)
+        '''
+        # A dictionary holder for the different ip queues
         self.input_queues = {}
         self.ips_tobeserved = Queue.Queue()
         self.output_port = output_port
         self.next_packet = None
 
-        # TODO: Normalise the weights with the mean packet length
-
-        # Unpack the weights as provided from the input
-        self.ip_weights = {'default': global_weight}
-        # Unpack the ip specific weights
-        if ip_overrides is not None:
-            for ip in ip_overrides:
-                self.ip_weights[ip] = ip_overrides[ip]
-        if output_specfic_overrides is not None:
-            for ip in output_specfic_overrides:
-                self.ip_weights[ip] = output_specfic_overrides[ip]
-
     def put_packet(self, packet):
         '''
-        Method to allow a caller to insert a new packet into the control of
-        the scheduler.
+        Method to allow a caller to insert a new Packet into the control of
+        this scheduler.
         '''
         # we process the ip as  string, because it's easier
         source_ip = ('%i.%i.%i.%i') % (packet.ip_source[0],
@@ -422,8 +450,8 @@ class RRScheduler(object):
 
     def ready_next_packet(self):
         '''
-        With the current state of the sceduler determine what packet is the
-        next to leave the system
+        With the current state of the scheduler determine what packet is the
+        next to leave the system.
         '''
         if self.ips_tobeserved.qsize() > 0:
             next_ip = self.ips_tobeserved.get()
@@ -438,7 +466,7 @@ class RRScheduler(object):
 
     def output_next_packet(self):
         '''
-        Return the next sceduled packet to the caller
+        Return the next scheduled Packet to the caller for framework sending.
         '''
         if self.next_packet is not None:
             if self.next_packet.datalength > 50:
@@ -452,14 +480,12 @@ class RRScheduler(object):
         else:
             return None
 
-
-# Main Schduler moved out of class into the main function to allow interactive
-# debugging
+# The Main function for when this file gets invoked.
 if __name__ == '__main__':
 
     ########################################################################
     # Retrieve the scheduler settings from controller
-    # Plan: to inplement as JSON format that could be transmissted over ip
+    # Plan: to implement as JSON format that could be transmitted over ip
     # or just as easily stored as text
     ########################################################################
     # Currently reading from a file, but can be retrieved from a url
@@ -483,6 +509,7 @@ if __name__ == '__main__':
     global_weight = our_config['global_ip_configs']
 
     source_queue_size = our_config['source_queue_size']
+    time_to_send = our_config['time_to_send']
 
     # DEBUG about system framework
     debug_str = (('Initialising schedRR.py ...\n') +
@@ -501,7 +528,7 @@ if __name__ == '__main__':
     output_sched_holder = []
 
     for output_n in range(NUM_OUTPUT):
-        # Determine if there are output specfic overrides
+        # Determine if there are output specific overrides
         input_weights = None
         if str(output_n) in output_overrides:
             input_weights = output_overrides[str(output_n)]
@@ -513,7 +540,7 @@ if __name__ == '__main__':
         )
 
     ########################################################################
-    # Initialising the Framework comunications
+    # Initialising the Framework communications
     ########################################################################
     # Setting up constants (these should be static)
     in_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -525,7 +552,7 @@ if __name__ == '__main__':
     # The output is a client ready to send data out
     out_sock.connect((HOST, OUT_PORT))
 
-    # Set a socket timeout to allow the system to DIE gracefully if no flows
+    # Set a socket time-out to allow the system to DIE gracefully if no flows
     in_sock.settimeout(20)
     out_sock.settimeout(0.5)
 
@@ -539,10 +566,10 @@ if __name__ == '__main__':
 
     our_time = 0
 
-    # If we want to do multi-threading of the diffrent schedulers we can here
+    # If we want to do multi-threading of the different schedulers we can here
     while True:
         ####################################################################
-        # Retreive and handle the incoming framework packet
+        # Retrieve and handle the incoming framework packet
         ####################################################################
         data, addr = in_sock.recvfrom(MAX_MSG_LEN)
 
@@ -557,17 +584,15 @@ if __name__ == '__main__':
             # Put the Incoming packet to the correct output port scheduler
             output_sched_holder[current_packet.toPort].put_packet(current_packet)
 
-            # Once the packet is placed onto the output scheduller, we should
+            # Once the packet is placed onto the output scheduler, we should
             # be complete on the input side of things
 
-            # Debug code for packets
-            packet_collector.append(current_packet)
-
             # Do things with current packet
-            print 'Success: packet %i in port %i (Src: %s.%s.%s.%s)' % (
+            print 'Success: packet %i in port %i (Src: %s.%s.%s.%s) to port %i' % (
                 int(current_packet.sequenceNum), int(current_packet.fromPort),
                 current_packet.ip_source[0], current_packet.ip_source[1],
-                current_packet.ip_source[2], current_packet.ip_source[3]
+                current_packet.ip_source[2], current_packet.ip_source[3],
+                int(current_packet.toPort)
             )
 
             sim_time = current_packet.timer
@@ -577,18 +602,23 @@ if __name__ == '__main__':
                 our_time = 0
 
         ####################################################################
-        # Invoke the schdulers to make a output decision and do the output
+        # Invoke the schedulers to make a output decision and do the output
         # to the next stage
         ####################################################################
-        while sim_time > our_time:
-            our_time += 4
+        while sim_time >= our_time:
+            our_time += time_to_send
 
+            # For every output scheduler
             for scheduler in output_sched_holder:
                 scheduler.ready_next_packet()
                 send_packet = scheduler.output_next_packet()
                 if send_packet is not None:
                     out_sock.sendall(send_packet.repack_packet())
-                    print 'Successfully sent on port %i' % scheduler.output_port
+                    print 'Successfully sent on port %i (Src: %s.%s.%s.%s)' % (
+                        scheduler.output_port,
+                        send_packet.ip_source[0], send_packet.ip_source[1],
+                        send_packet.ip_source[2], send_packet.ip_source[3]
+                    )
 
             for scheduler in output_sched_holder:
                 scheduler.print_status()

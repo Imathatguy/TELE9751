@@ -7,8 +7,8 @@
         "max_msg_len":              200,
 
         "num_output_ports":         8,
-
         "source_queue_size":        4,
+        "time_to_send":             4,
 
         "_comment_output":          "If set individual ip/output params will override global defaults and ip defaults",
         "individual_output_configs": {
