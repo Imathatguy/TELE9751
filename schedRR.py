@@ -238,7 +238,7 @@ class WRRScheduler(object):
     A class to hold all the methods involving a single output weighted
     round robin scheduler.
     '''
-    def __init__(self, output_port, output_specfic_overrides,
+    def __init__(self, output_port, output_specific_overrides,
                  ip_overrides, global_config, queue_size=0):
         '''
         Initialises a WRRScheduler class.
@@ -267,12 +267,56 @@ class WRRScheduler(object):
         if ip_overrides is not None:
             for ip in ip_overrides:
                 self.ip_config[ip] = ip_overrides[ip]
-        if output_specfic_overrides is not None:
-            for ip in output_specfic_overrides:
-                self.ip_config[ip] = output_specfic_overrides[ip]
+        if output_specific_overrides is not None:
+            for ip in output_specific_overrides:
+                self.ip_config[ip] = output_specific_overrides[ip]
 
         # Rouding of the precision for packets/round
         self.rounding_precision = 100
+
+        self.validate_configs()
+
+    def validate_configs(self):
+        '''
+        The robustness check of the IP configurations,
+        Ensures that:
+            - keys are valid,
+            - values are valid,
+            - weights > 0,
+            - lengths > 0,
+        '''
+
+        def check_values(ip_config):
+            '''
+            Trys to resolve parameters as floats, if string will error
+            '''
+            try:
+                # We also do not want these to be 0
+                if float(ip_config['weight']) <= 0:
+                    return False
+                if float(ip_config['mean_length']) <= 0:
+                    return False
+            except (ValueError, KeyError):
+                return False
+            else:
+                return True
+
+        # Check the global configs (if corrupt, defualt to 1)
+        if not check_values(self.ip_config['default']):
+            print 'Improper Default Configurations on Output %s' % self.output_port
+            print 'Using defaults'
+            self.ip_config['default'] = {'weight': 1, 'mean_length': 1}
+
+        # Check all the other configs
+        for check_ip in list(self.ip_config.keys()):
+            if not check_values(self.ip_config[check_ip]):
+                # If the configuration for this ip is ivalid/broken
+                # remove it from the configs that are being used
+                self.ip_config.pop(check_ip)
+                print 'Improper Configuration for IP %s on Output %s' % (
+                    check_ip, self.output_port
+                )
+                print 'Using defaults'
 
     def recompute_round_service(self):
         '''

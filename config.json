@@ -11,6 +11,7 @@
         "time_to_send":             4,
 
         "_comment_output":          "If set individual ip/output params will override global defaults and ip defaults",
+        "_comment_default":         "If set for a output port it will have it's own defaults overriding the global defaults",
         "individual_output_configs": {
             "0": {
                 "192.0.0.1":{
@@ -23,7 +24,15 @@
                 },
                 "192.0.0.3":{
                     "weight":       4,
-                    "mean_length":  1
+                    "mean_length":  "Corrupt_Value"
+                },
+                "192.0.0.4":{
+                    "improper_weight_key":       0,
+                    "mean_length":  "Corrupt_Key"
+                },
+                "default":{
+                    "weight":       2,
+                    "mean_length":  "L"
                 }
             },
             "1": {
