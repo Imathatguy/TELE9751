@@ -1,9 +1,15 @@
-Daniel Paul Iuliano
-z3101121
-diuliano@gmail.com
-Thesis Topic University of New South Wales
-Supervisor: Tim Moors
-The PC Switch
+ORIGINAL AUTHOR OF FRAMEWORK
+	Daniel Paul Iuliano
+	z3101121
+	diuliano@gmail.com
+	Thesis Topic University of New South Wales
+	Supervisor: Tim Moors
+	The PC Switch
+
+MODIFIED FOR WEIGHTED ROUND ROBIN
+	 
+	 Group 4,7
+
 
 ReadMe File
 
@@ -19,6 +25,8 @@ Each component of the switch needs to be run seperately. For the Single switch t
 
 ./clasT & (or ./clasH & for Hash classifier)
 ./fab &
-./schedR & (or ./clasH & for Hash classifier)
-./analys (in a seperate window for seperate output)
+python SchedRR.py (in a seperate window for seperate output)
 ./gen (make sure it is run last due to other modules dependant on generator starting the flow)
+
+Or alternatively if you have a mac (not sure if it works on unix shells) run:
+bash run_framework.sh
