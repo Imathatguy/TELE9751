@@ -18,10 +18,7 @@ any&nbsp;additional&nbsp;libraries&nbsp;for&nbsp;better&nbsp;system&nbsp;compati
 &nbsp;<br>
 This&nbsp;script&nbsp;as&nbsp;been&nbsp;constructed&nbsp;for&nbsp;Python&nbsp;2.7,&nbsp;due&nbsp;to&nbsp;syntax&nbsp;familiarity<br>
 &nbsp;<br>
-&nbsp;<br>
-Created&nbsp;on&nbsp;Thu&nbsp;Apr&nbsp;24&nbsp;10:51:47&nbsp;2017<br>
-&nbsp;<br>
-@author:&nbsp;benjamin&nbsp;zhao</tt></p>
+Created&nbsp;on&nbsp;Thu&nbsp;Apr&nbsp;24&nbsp;10:51:47&nbsp;2017</tt></p>
 <p>
 <table width="100%" cellspacing=0 cellpadding=2 border=0 summary="section">
 <tr bgcolor="#aa55cc">
@@ -76,8 +73,7 @@ Original&nbsp;C&nbsp;definition:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;int&nbsp;timer;<br>
 &nbsp;&nbsp;&nbsp;&nbsp;};<br>
 &nbsp;<br>
-&nbsp;<br>
-Attributes:&nbsp;&nbsp;<br>
+Attributes:<br>
 &nbsp;<br>
 &nbsp;&nbsp;&nbsp;&nbsp;ip_dest<br>
 &nbsp;&nbsp;&nbsp;&nbsp;ip_source<br>
@@ -185,7 +181,7 @@ Data descriptors defined here:<br>
 round&nbsp;robin&nbsp;scheduler.<br>&nbsp;</tt></td></tr>
 <tr><td>&nbsp;</td>
 <td width="100%">Methods defined here:<br>
-<dl><dt><a name="WRRScheduler-__init__"><strong>__init__</strong></a>(self, output_port, output_specfic_overrides, ip_overrides, global_config, queue_size<font color="#909090">=0</font>)</dt><dd><tt>Initialises&nbsp;a&nbsp;<a href="#WRRScheduler">WRRScheduler</a>&nbsp;class.<br>
+<dl><dt><a name="WRRScheduler-__init__"><strong>__init__</strong></a>(self, output_port, output_specific_overrides, ip_overrides, global_config, queue_size<font color="#909090">=0</font>)</dt><dd><tt>Initialises&nbsp;a&nbsp;<a href="#WRRScheduler">WRRScheduler</a>&nbsp;class.<br>
 &nbsp;<br>
 Inputs:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;output_port:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;An&nbsp;identifier&nbsp;for&nbsp;the&nbsp;current&nbsp;output&nbsp;port<br>
@@ -208,6 +204,13 @@ next&nbsp;to&nbsp;leave&nbsp;the&nbsp;system.</tt></dd></dl>
 
 <dl><dt><a name="WRRScheduler-recompute_round_service"><strong>recompute_round_service</strong></a>(self)</dt><dd><tt>We&nbsp;recompute&nbsp;the&nbsp;weights&nbsp;of&nbsp;the&nbsp;current&nbsp;active&nbsp;queues&nbsp;for&nbsp;the&nbsp;next<br>
 round&nbsp;of&nbsp;service.</tt></dd></dl>
+
+<dl><dt><a name="WRRScheduler-validate_configs"><strong>validate_configs</strong></a>(self)</dt><dd><tt>The&nbsp;robustness&nbsp;check&nbsp;of&nbsp;the&nbsp;IP&nbsp;configurations,<br>
+Ensures&nbsp;that:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;keys&nbsp;are&nbsp;valid,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;values&nbsp;are&nbsp;valid,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;weights&nbsp;&gt;&nbsp;0,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;lengths&nbsp;&gt;&nbsp;0,</tt></dd></dl>
 
 <hr>
 Data descriptors defined here:<br>

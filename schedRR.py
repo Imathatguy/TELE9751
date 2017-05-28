@@ -7,10 +7,7 @@ any additional libraries for better system compatibility
 
 This script as been constructed for Python 2.7, due to syntax familiarity
 
-
 Created on Thu Apr 24 10:51:47 2017
-
-@author: benjamin zhao
 """
 # For the packet Class
 import struct
@@ -42,8 +39,7 @@ class Packet(object):
             int timer;
         };
 
-
-    Attributes:  
+    Attributes:
 
         ip_dest
         ip_source
@@ -55,10 +51,8 @@ class Packet(object):
         sequenceNum
         portSequenceNum
         timer
-
-
     '''
-    # TODO implement more error/malformeation checks
+    # TODO implement more error/malformation checks
 
     def __init__(self, data):
         '''
@@ -271,7 +265,7 @@ class WRRScheduler(object):
             for ip in output_specific_overrides:
                 self.ip_config[ip] = output_specific_overrides[ip]
 
-        # Rouding of the precision for packets/round
+        # Rounding of the precision for packets/round
         self.rounding_precision = 100
 
         self.validate_configs()
@@ -301,7 +295,7 @@ class WRRScheduler(object):
             else:
                 return True
 
-        # Check the global configs (if corrupt, defualt to 1)
+        # Check the global configs (if corrupt, default to 1)
         if not check_values(self.ip_config['default']):
             print 'Improper Default Configurations on Output %s' % self.output_port
             print 'Using defaults'
@@ -310,7 +304,7 @@ class WRRScheduler(object):
         # Check all the other configs
         for check_ip in list(self.ip_config.keys()):
             if not check_values(self.ip_config[check_ip]):
-                # If the configuration for this ip is ivalid/broken
+                # If the configuration for this ip is invalid/broken
                 # remove it from the configs that are being used
                 self.ip_config.pop(check_ip)
                 print 'Improper Configuration for IP %s on Output %s' % (
@@ -373,14 +367,15 @@ class WRRScheduler(object):
             this_ip = config[0]
             packets_this_round = config[1]
             # Enqueue the number of packets we need onto the waiting queue
-            for increment in range(min(packets_this_round, self.input_queues[this_ip].qsize())):
+            for increment in range(min(packets_this_round,
+                                       self.input_queues[this_ip].qsize())):
                 self.ips_tobeserved.put(this_ip)
 
     def print_status(self):
         '''
         Prints to console the status of the current scheduler.
         '''
-        print_str = ('Output %s waiting ' % self.output_port)
+        print_str = ('Output %s pending sources: ' % self.output_port)
 
         if len(self.input_queues.keys()) == 0:
             # print_str += 'Empty'
@@ -505,7 +500,7 @@ class RRScheduler(object):
             if self.input_queues[next_ip].empty():
                 self.input_queues.pop(next_ip, None)
             else:
-                # requeue the ip to be serviced
+                # re-queue the ip to be serviced
                 self.ips_tobeserved.put(next_ip)
 
     def output_next_packet(self):
@@ -597,13 +592,13 @@ if __name__ == '__main__':
     out_sock.connect((HOST, OUT_PORT))
 
     # Set a socket time-out to allow the system to DIE gracefully if no flows
-    in_sock.settimeout(20)
-    out_sock.settimeout(0.5)
+    # in_sock.settimeout(20)
+    # out_sock.settimeout(0.5)
 
     print '\nCompleted WRR Scheduler initialisation'
 
     # accumulate the packets for DEBUGing
-    packet_collector = []
+    # packet_collector = []
     ########################################################################
     # The Main loop
     ########################################################################
@@ -632,7 +627,7 @@ if __name__ == '__main__':
             # be complete on the input side of things
 
             # Do things with current packet
-            print 'Success: packet %i in port %i (Src: %s.%s.%s.%s) to port %i' % (
+            print 'Success Input: packet %i in on port %i (Src: %s.%s.%s.%s) to port %i' % (
                 int(current_packet.sequenceNum), int(current_packet.fromPort),
                 current_packet.ip_source[0], current_packet.ip_source[1],
                 current_packet.ip_source[2], current_packet.ip_source[3],
@@ -654,15 +649,22 @@ if __name__ == '__main__':
 
             # For every output scheduler
             for scheduler in output_sched_holder:
+                # Prepare the next Packet for sending
                 scheduler.ready_next_packet()
+                # Retrieve the next Packet for sending to the framework
                 send_packet = scheduler.output_next_packet()
+                # Only send if there is a Packet.
                 if send_packet is not None:
+                    # Send the Packet, after repacking it in a C format
                     out_sock.sendall(send_packet.repack_packet())
-                    print 'Successfully sent on port %i (Src: %s.%s.%s.%s)' % (
-                        scheduler.output_port,
+                    # Debug messages
+                    print 'Success Output: packet %i out on port %i (Src: %s.%s.%s.%s) from port %i' % (
+                        int(send_packet.sequenceNum), scheduler.output_port,
                         send_packet.ip_source[0], send_packet.ip_source[1],
-                        send_packet.ip_source[2], send_packet.ip_source[3]
+                        send_packet.ip_source[2], send_packet.ip_source[3],
+                        send_packet.fromPort
                     )
 
+            # Debug messages
             for scheduler in output_sched_holder:
                 scheduler.print_status()

@@ -1,5 +1,5 @@
 osascript -e 'tell application "Terminal" to do script "cd 9751_project/;./clasT"'
 osascript -e 'tell application "Terminal" to do script "cd 9751_project/;./fab"'
-osascript -e 'tell application "Terminal" to do script "cd 9751_project/;./schedR"'
+osascript -e 'tell application "Terminal" to do script "cd 9751_project/;python schedRR.py"'
 osascript -e 'tell application "Terminal" to do script "cd 9751_project/;./analys"'
 osascript -e 'tell application "Terminal" to do script "cd 9751_project/;pwd"'
